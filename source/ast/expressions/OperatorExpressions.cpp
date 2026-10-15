@@ -509,6 +509,42 @@ void UnaryExpression::serializeTo(ASTSerializer& serializer) const {
     serializer.write("operand", operand());
 }
 
+// The source range of a binary expression, without re-walking an operand that
+// already knows its own range.
+//
+// SyntaxNode::sourceRange() descends the leftmost and rightmost spines of the
+// subtree to find its outer tokens, so asking every level of a left-leaning
+// chain of N operators for its own range costs O(N^2). The first token of this
+// node is the first token of `left` and the last is the last token of `right`,
+// and an operand that is itself a binary-expression syntax node was bound to an
+// expression carrying exactly that operand's range -- so take it from there.
+// Everything else (a parenthesized operand, whose bound expression is the inner
+// expression and so has a narrower range; an operand that failed to bind; a
+// spine with no real token) keeps the walk, which is what makes the result
+// identical to syntax.sourceRange() in every case.
+static SourceRange chainedSourceRange(const BinaryExpressionSyntax& syntax, const Expression& lhs,
+                                      const Expression& rhs) {
+    auto rangeOf = [](const ExpressionSyntax& operandSyntax, const Expression& bound) {
+        if (bound.kind == ExpressionKind::BinaryOp &&
+            BinaryExpressionSyntax::isKind(operandSyntax.kind)) {
+            return bound.sourceRange;
+        }
+        return SourceRange();
+    };
+
+    SourceLocation start = rangeOf(*syntax.left, lhs).start();
+    if (!start)
+        start = syntax.getFirstToken().location();
+
+    SourceLocation end = rangeOf(*syntax.right, rhs).end();
+    if (!end) {
+        auto lastToken = syntax.getLastToken();
+        end = lastToken.location() + lastToken.rawText().length();
+    }
+
+    return SourceRange(start, end);
+}
+
 Expression& BinaryExpression::fromSyntax(Compilation& compilation,
                                          const BinaryExpressionSyntax& syntax,
                                          const ASTContext& context) {
@@ -584,7 +620,7 @@ Expression& BinaryExpression::fromSyntax(Compilation& compilation,
     }
 
     auto& result = fromComponents(*lhs, *rhs, op, syntax.operatorToken.range(),
-                                  syntax.sourceRange(), context);
+                                  chainedSourceRange(syntax, *lhs, *rhs), context);
     context.setAttributes(result, syntax.attributes);
 
     return result;
@@ -736,7 +772,19 @@ Expression& BinaryExpression::fromComponents(Expression& lhs, Expression& rhs, B
 
     bool bothIntegral = lt->isIntegral() && rt->isIntegral();
     bool bothNumeric = lt->isNumeric() && rt->isNumeric();
-    bool bothStrings = lhs.isImplicitString() && rhs.isImplicitString();
+
+    // Expression::isImplicitString() recurses through both operands of a binary
+    // operator, so computing this eagerly walks the whole left operand of every
+    // level -- O(N^2) over one flat chain of N operators. Only the string-capable
+    // branches below need it and each has a cheap type guard in front, so compute
+    // it at most once, on demand; isImplicitString() is const and side-effect free
+    // on the expressions themselves.
+    std::optional<bool> bothStringsCache;
+    auto bothStrings = [&] {
+        if (!bothStringsCache)
+            bothStringsCache = lhs.isImplicitString() && rhs.isImplicitString();
+        return *bothStringsCache;
+    };
 
     auto forceFourState = [](Compilation& compilation, const Type* forceType) {
         if (forceType->isFloating() || forceType->isFourState())
@@ -757,7 +805,7 @@ Expression& BinaryExpression::fromComponents(Expression& lhs, Expression& rhs, B
         case BinaryOperator::Add:
             // Allow string concatenation with + only if at least one operand is
             // actually of string type and not a string literal. This is a non-standard extension.
-            if ((lt->isString() || rt->isString()) && bothStrings) {
+            if ((lt->isString() || rt->isString()) && bothStrings()) {
                 good = true;
                 result->type = &compilation.getStringType();
                 context.addDiag(diag::NonstandardStringConcat, opRange);
@@ -823,7 +871,7 @@ Expression& BinaryExpression::fromComponents(Expression& lhs, Expression& rhs, B
         case BinaryOperator::LessThanEqual:
         case BinaryOperator::LessThan: {
             // Result is always a single bit.
-            good = bothNumeric || bothStrings;
+            good = bothNumeric || bothStrings();
             result->type = singleBitType(compilation, lt, rt);
 
             // Result type is fixed but the two operands affect each other as they would in
@@ -891,7 +939,7 @@ Expression& BinaryExpression::fromComponents(Expression& lhs, Expression& rhs, B
                 bool isWildcard = op == BinaryOperator::WildcardEquality ||
                                   op == BinaryOperator::WildcardInequality;
 
-                if (bothStrings) {
+                if (bothStrings()) {
                     good = !isWildcard;
                     result->type = &compilation.getBitType();
 
