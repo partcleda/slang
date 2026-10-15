@@ -659,6 +659,7 @@ error CantModifyConst "constant '{}' is not modifiable"
 error AssignmentToConstVar "cannot assign to read-only variable '{}'"
 error BlockingAssignToFreeVar "continuous assignments and blocking procedural assignments to free checker variables are not allowed"
 error EmptyConcatNotAllowed "concatenation cannot be empty"
+warning nonstandard-zero-size-literal NonstandardZeroSizeLiteral "zero-size vector literal is not allowed in SystemVerilog; treating it as a concatenation operand of zero width"
 error TimingControlNotAllowed "timing control is not allowed in this context"
 error NewArrayTarget "new array expression can only be used in an assignment to a dynamic array type"
 error NewClassTarget "new class expression can only be used in an assignment to a class type"
@@ -1287,7 +1288,7 @@ group default = { real-underflow real-overflow vector-overflow int-overflow unco
                   nonstandard-string-concat nested-comment multi-write read-write mixed-var-assigns
                   multiple-cont-assigns multiple-always-assigns misplaced-trailing-separator
                   qualifiers-on-out-of-block member-impl-not-found shift-count-overflow shift-count-negative
-                  initializer-required package-import-in-class }
+                  initializer-required package-import-in-class nonstandard-zero-size-literal }
 
 group extra = { empty-member empty-stmt dup-import pointless-void-cast case-gen-none case-gen-dup
                 unused-result format-real ignored-slice task-ignored width-trunc dup-attr event-const

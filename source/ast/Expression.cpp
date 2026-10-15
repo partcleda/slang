@@ -14,6 +14,7 @@
 #include "slang/ast/types/Type.h"
 #include "slang/diagnostics/ExpressionsDiags.h"
 #include "slang/diagnostics/LookupDiags.h"
+#include "slang/diagnostics/NumericDiags.h"
 #include "slang/syntax/AllSyntax.h"
 #include "slang/syntax/SyntaxVisitor.h"
 
@@ -784,6 +785,17 @@ Expression& Expression::create(Compilation& compilation, const ExpressionSyntax&
                 compilation, syntax.as<LiteralExpressionSyntax>());
             break;
         case SyntaxKind::IntegerVectorExpression:
+            // Only reachable for a zero-size literal under AllowZeroSizeLiterals, where
+            // the parser stayed quiet; ConcatenationExpression::fromSyntax has already
+            // dropped the operands where VCS gives it a meaning, so anything left here
+            // has no zero-width value to bind and must still be rejected.
+            if (compilation.hasFlag(CompilationFlags::AllowZeroSizeLiterals) &&
+                isZeroSizeVectorLiteral(syntax)) {
+                context.addDiag(diag::LiteralSizeIsZero,
+                                syntax.as<IntegerVectorExpressionSyntax>().size.location());
+                result = &badExpr(compilation, nullptr);
+                break;
+            }
             result = &IntegerLiteral::fromSyntax(compilation,
                                                  syntax.as<IntegerVectorExpressionSyntax>());
             break;
@@ -1508,6 +1520,14 @@ Expression* Expression::tryBindInterfaceRef(const ASTContext& context,
     auto hierRef = HierarchicalReference::fromLookup(comp, result);
     return comp.emplace<ArbitrarySymbolExpression>(*context.scope, *origSymbol, *type, &hierRef,
                                                    sourceRange);
+}
+
+bool Expression::isZeroSizeVectorLiteral(const ExpressionSyntax& syntax) {
+    if (syntax.kind != SyntaxKind::IntegerVectorExpression)
+        return false;
+
+    auto& size = syntax.as<IntegerVectorExpressionSyntax>().size;
+    return size && !size.isMissing() && size.intValue() == 0;
 }
 
 void Expression::findPotentiallyImplicitNets(

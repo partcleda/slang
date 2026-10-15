@@ -23,7 +23,8 @@ namespace slang::parsing {
 
 class NumberParser {
 public:
-    NumberParser(Diagnostics& diagnostics, BumpAllocator& alloc, LanguageVersion languageVersion);
+    NumberParser(Diagnostics& diagnostics, BumpAllocator& alloc, LanguageVersion languageVersion,
+                 bool allowZeroSizeLiterals = false);
 
     struct IntResult {
         Token size;
@@ -183,6 +184,9 @@ private:
     bitwidth_t sizeBits = 0;
     LiteralBase literalBase = LiteralBase::Binary;
     LanguageVersion languageVersion;
+    // When set, a vector literal with an explicit size of zero is not diagnosed here;
+    // see ParserOptions::allowZeroSizeLiterals.
+    bool allowZeroSizeLiterals;
     SourceLocation firstLocation;
     bool signFlag = false;
     bool hasUnknown = false;

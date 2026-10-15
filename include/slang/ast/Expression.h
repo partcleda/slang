@@ -216,6 +216,13 @@ public:
                                           std::span<const ExpressionSyntax* const> expressions,
                                           SmallVectorBase<const Expression*>& results);
 
+    /// Returns true if the given syntax node is a vector literal with an explicit size
+    /// of zero (e.g. `0'b0`). Such a literal is illegal SystemVerilog (IEEE 1800-2017
+    /// 5.7.1) and normally rejected by the parser; it survives to the AST only under
+    /// CompilationFlags::AllowZeroSizeLiterals, where it is accepted as a zero-width
+    /// concatenation operand and rejected everywhere else.
+    static bool isZeroSizeVectorLiteral(const ExpressionSyntax& syntax);
+
     /// This method finds all unqualified name references in the given expression and attempts
     /// to look them up in the given context. If they can't be found, their name tokens are
     /// returned in the given @a results vector.

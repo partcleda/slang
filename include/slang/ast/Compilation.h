@@ -118,9 +118,16 @@ enum class SLANG_EXPORT CompilationFlags {
 
     /// Allow interface instances that are bind/defparam targets to be assigned
     /// to virtual interfaces.
-    AllowVirtualIfaceWithOverride = 1 << 14
+    AllowVirtualIfaceWithOverride = 1 << 14,
+
+    /// Allow a vector literal with an explicit size of zero (e.g. `0'b0`) to be used
+    /// as a concatenation operand, where it contributes no bits. This is illegal in
+    /// SystemVerilog (IEEE 1800-2017 5.7.1) but VCS accepts it. Requires
+    /// parsing::ParserOptions::allowZeroSizeLiterals to be set as well, since the
+    /// literal is otherwise rejected at parse time.
+    AllowZeroSizeLiterals = 1 << 15
 };
-SLANG_BITMASK(CompilationFlags, AllowVirtualIfaceWithOverride)
+SLANG_BITMASK(CompilationFlags, AllowZeroSizeLiterals)
 
 /// Contains various options that can control compilation behavior.
 struct SLANG_EXPORT CompilationOptions {

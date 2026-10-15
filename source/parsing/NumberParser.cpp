@@ -28,8 +28,9 @@ static logic_t getLogicCharValue(char c) {
 }
 
 NumberParser::NumberParser(Diagnostics& diagnostics, BumpAllocator& alloc,
-                           LanguageVersion languageVersion) :
-    languageVersion(languageVersion), diagnostics(diagnostics), alloc(alloc) {
+                           LanguageVersion languageVersion, bool allowZeroSizeLiterals) :
+    languageVersion(languageVersion), allowZeroSizeLiterals(allowZeroSizeLiterals),
+    diagnostics(diagnostics), alloc(alloc) {
 }
 
 void NumberParser::startVector(Token baseToken, Token sizeToken) {
@@ -50,7 +51,14 @@ void NumberParser::startVector(Token baseToken, Token sizeToken) {
     if (sizeToken) {
         const SVInt& sizeVal = sizeToken.intValue();
         if (sizeVal == 0) {
-            addDiag(diag::LiteralSizeIsZero, sizeToken.location());
+            // A zero size is illegal (IEEE 1800-2017 5.7.1), but VCS accepts such a
+            // literal as a zero-width concatenation operand. When that compatibility
+            // is enabled the literal is left alone here and dealt with in the AST:
+            // ConcatenationExpression::fromSyntax drops it, and Expression::create
+            // rejects it in every other context (there is no zero-width value to
+            // bind). sizeBits stays 0, which is never observed for a dropped operand.
+            if (!allowZeroSizeLiterals)
+                addDiag(diag::LiteralSizeIsZero, sizeToken.location());
         }
         else if (sizeVal > (int)SVInt::MAX_BITS) {
             sizeBits = SVInt::MAX_BITS;

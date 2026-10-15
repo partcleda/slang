@@ -1982,6 +1982,19 @@ SystemVerilog but are supported by some tools.
 int foo[] = '{};
 ```
 
+-Wnonstandard-zero-size-literal
+A vector literal must have a nonzero size, but some tools accept a zero size as
+a concatenation operand that contributes no bits. This is only allowed when
+`--allow-zero-size-literals` is set; the width of the concatenation changes as a
+result, so the warning is on by default.
+```
+module top;
+    logic [4:0] a;
+    logic [5:0] b;
+    assign b = {a, 0'b0};
+endmodule
+```
+
 -Wnonstandard-foreach
 foreach loops are not allowed to have multidimensional brackets when declaring
 loop variables, but most tools allow it as an extension.

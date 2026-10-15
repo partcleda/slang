@@ -135,6 +135,12 @@ struct SLANG_EXPORT ParserOptions {
 
     /// The version of the SystemVerilog language to use.
     LanguageVersion languageVersion = LanguageVersion::Default;
+
+    /// Don't report an error for a vector literal with an explicit size of zero
+    /// (e.g. `0'b0`). Such a literal is illegal SystemVerilog but VCS accepts it as
+    /// a zero-width concatenation operand; this must be set together with
+    /// ast::CompilationFlags::AllowZeroSizeLiterals, which handles it in the AST.
+    bool allowZeroSizeLiterals = false;
 };
 
 /// Implements a full syntax parser for SystemVerilog.

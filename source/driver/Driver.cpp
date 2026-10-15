@@ -225,6 +225,9 @@ void Driver::addStandardArgs() {
                 "--allow-virtual-iface-with-override",
                 "Allow interface instances that are bind/defparam targets to be assigned "
                 "to virtual interfaces");
+    addCompFlag(CompilationFlags::AllowZeroSizeLiterals, "--allow-zero-size-literals",
+                "Allow a vector literal with an explicit size of zero (e.g. 0'b0) as a "
+                "concatenation operand, where it contributes no bits");
 
     cmdLine.add("--top", options.topModules,
                 "One or more top-level modules to instantiate "
@@ -1003,6 +1006,13 @@ void Driver::addParseOptions(Bag& bag) const {
     poptions.languageVersion = languageVersion;
     if (options.maxParseDepth.has_value())
         poptions.maxRecursionDepth = *options.maxParseDepth;
+
+    // Must track CompilationFlags::AllowZeroSizeLiterals: the parser only stays quiet
+    // about a zero-size literal because the AST knows how to handle it.
+    if (auto it = options.compilationFlags.find(CompilationFlags::AllowZeroSizeLiterals);
+        it != options.compilationFlags.end()) {
+        poptions.allowZeroSizeLiterals = it->second == true;
+    }
 
     bag.set(soptions);
     bag.set(ppoptions);

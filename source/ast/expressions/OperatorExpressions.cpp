@@ -1900,7 +1900,22 @@ Expression& ConcatenationExpression::fromSyntax(Compilation& comp,
     bitwidth_t totalWidth = 0;
     SmallVector<Expression*> buffer;
 
+    const bool allowZeroSize = comp.hasFlag(CompilationFlags::AllowZeroSizeLiterals);
+    bool zeroSizeWarned = false;
+
     for (auto argSyntax : syntax.expressions) {
+        // A zero-size vector literal (`0'b0`) is illegal SystemVerilog, but VCS accepts
+        // one here as an operand that contributes no bits. There is no zero-width value
+        // to bind, so drop the operand instead; if that leaves the concatenation empty
+        // the EmptyConcatNotAllowed check below still catches it.
+        if (allowZeroSize && isZeroSizeVectorLiteral(*argSyntax)) {
+            if (!zeroSizeWarned) {
+                context.addDiag(diag::NonstandardZeroSizeLiteral, argSyntax->sourceRange());
+                zeroSizeWarned = true;
+            }
+            continue;
+        }
+
         // Replications inside of concatenations have a special feature that allows them to have
         // a width of zero. Check now if we're going to be creating a replication and if so set
         // an additional flag so that it knows it's ok to have that zero count.
