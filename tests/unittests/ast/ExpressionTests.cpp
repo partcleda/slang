@@ -536,9 +536,9 @@ source:8:13: error: size of vector literal cannot be zero
 source:9:13: error: size of vector literal is too large (> 16777215 bits)
     int k = 16777216'd1;
             ^
-source:12:13: warning: signed integer literal overflows 32 bits, will be truncated to -727379969 [-Wint-overflow]
+source:12:11: warning: implicit conversion from 'bit signed[40:0]' to 'int' changes value from 41'sd999999999999 to -727379969 [-Wconstant-conversion]
     int n = 999999999999;
-            ^
+          ^ ~~~~~~~~~~~~
 source:13:16: error: numeric literals must not start with a leading underscore
     int o = 'b _?1;
                ^
@@ -3384,10 +3384,10 @@ $info(p[-2147483648:-2147483649]);
     compilation.addSyntaxTree(tree);
 
     auto& diags = compilation.getAllDiagnostics();
-    REQUIRE(diags.size() == 3);
-    CHECK(diags[0].code == diag::RangeWidthOverflow);
-    CHECK(diags[1].code == diag::SignedIntegerOverflow);
-    CHECK(diags[2].code == diag::SignedIntegerOverflow);
+    // boson patch 0005: unsized decimal literals keep their full width, so the
+    // bound -2147483649 is a 33-bit value that does not fit an int32.
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].code == diag::ValueOutOfRange);
 }
 
 TEST_CASE("Assigning void in expressions is illegal") {

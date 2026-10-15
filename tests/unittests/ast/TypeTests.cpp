@@ -2272,10 +2272,10 @@ logic [-2147483648:-2147483649] a;
     compilation.addSyntaxTree(tree);
 
     auto& diags = compilation.getAllDiagnostics();
-    REQUIRE(diags.size() == 3);
-    CHECK(diags[0].code == diag::PackedTypeTooLarge);
-    CHECK(diags[1].code == diag::SignedIntegerOverflow);
-    CHECK(diags[2].code == diag::SignedIntegerOverflow);
+    // boson patch 0005: unsized decimal literals keep their full width, so
+    // -2147483649 is a 33-bit value that does not fit a range bound.
+    REQUIRE(diags.size() == 1);
+    CHECK(diags[0].code == diag::ValueOutOfRange);
 }
 
 TEST_CASE("Virtual interface element select of member") {
