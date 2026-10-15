@@ -157,6 +157,18 @@ public:
                             return add(decl, defSym, ""sv, /* isGeneric */ false,
                                        syntax.attributes);
                         }
+
+                        // A bare identifier that names nothing, in the header of an
+                        // uninstantiated body (an unreferenced definition's checking
+                        // instance), is an interface port whose interface is not in the
+                        // source set. Tools that elaborate from the top never resolve it,
+                        // and the body is never lowered, so it is not an error here. An
+                        // instantiated copy of the same definition still reports it.
+                        if (!found && !header.direction && !header.varKeyword &&
+                            scope.isUninstantiated()) {
+                            return add(decl, nullptr, ""sv, /* isGeneric */ false,
+                                       syntax.attributes);
+                        }
                     }
                 }
 
