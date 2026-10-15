@@ -1328,14 +1328,22 @@ SVInt SVInt::operator/(const SVInt& rhs) const {
 
     // handle signed division
     if (bothSigned) {
-        // do the division on positive numbers and flip the sign at the end
-        if (isNegative()) {
-            if (rhs.isNegative())
-                return udiv(-(*this), -rhs, true);
-            return -udiv(-(*this), rhs, true);
-        }
-        if (rhs.isNegative())
-            return -udiv(*this, -rhs, true);
+        // Divide the MAGNITUDES and apply the sign at the end. udiv() takes two
+        // positive values, so the magnitudes must reach it as UNSIGNED values:
+        // the magnitude of the most negative value is 2**(bitWidth-1), whose top
+        // bit is set, and a signed reading of that is negative again -- which
+        // makes udiv()'s sign-aware `lhs < rhs` true for every positive divisor
+        // and makes SVInt(bits, uint64_t, /* isSigned */ true) sign extend a
+        // one-word magnitude of 2**63 or more.
+        const bool negateResult = isNegative() != rhs.isNegative();
+        SVInt lhsMag = isNegative() ? -(*this) : *this;
+        SVInt rhsMag = rhs.isNegative() ? -rhs : rhs;
+        lhsMag.setSigned(false);
+        rhsMag.setSigned(false);
+
+        SVInt result = udiv(lhsMag, rhsMag, false);
+        result.setSigned(true);
+        return negateResult ? -result : result;
     }
 
     // otherwise, just do the division
@@ -1356,15 +1364,19 @@ SVInt SVInt::operator%(const SVInt& rhs) const {
         return createFillX(bitWidth, bothSigned);
 
     // handle signed remainder
-    if (bothSigned) {
-        // do the remainder on positive numbers and flip the sign at the end
-        if (isNegative()) {
-            if (rhs.isNegative())
-                return -urem(-(*this), -rhs, true);
-            return -urem(-(*this), rhs, true);
-        }
-        if (rhs.isNegative())
-            return urem(*this, -rhs, true);
+    if (bothSigned && (isNegative() || rhs.isNegative())) {
+        // Take the remainder of the MAGNITUDES (as unsigned values, see
+        // operator/) and give it the sign of the dividend. Two non-negative
+        // operands are their own magnitudes and keep the unsigned path below.
+        const bool negateResult = isNegative();
+        SVInt lhsMag = negateResult ? -(*this) : *this;
+        SVInt rhsMag = rhs.isNegative() ? -rhs : rhs;
+        lhsMag.setSigned(false);
+        rhsMag.setSigned(false);
+
+        SVInt result = urem(lhsMag, rhsMag, false);
+        result.setSigned(true);
+        return negateResult ? -result : result;
     }
 
     // otherwise, just do the remainder
@@ -2152,6 +2164,16 @@ void SVInt::splitWords(const SVInt& value, uint32_t* dest, uint32_t numWords) {
     }
 }
 
+// Build a `bitWidth`-wide value from one word of MAGNITUDE bits, as the unsigned
+// divide helpers below produce. SVInt(bits, uint64_t, isSigned) sign extends, so
+// for bitWidth > 64 a magnitude of 2**63 or more would come back negative: build
+// it unsigned and only then give it the requested representation.
+static SVInt fromMagnitudeWord(bitwidth_t bitWidth, uint64_t word, bool isSigned) {
+    SVInt result(bitWidth, word, false);
+    result.setSigned(isSigned);
+    return result;
+}
+
 void SVInt::buildDivideResult(SVInt* result, uint32_t* value, bitwidth_t bitWidth, bool signFlag,
                               uint32_t numWords) {
     if (!result)
@@ -2159,7 +2181,7 @@ void SVInt::buildDivideResult(SVInt* result, uint32_t* value, bitwidth_t bitWidt
 
     if (numWords == 1) {
         uint64_t val = uint64_t(value[0]) | (uint64_t(value[1]) << (BITS_PER_WORD / 2));
-        *result = SVInt(bitWidth, val, signFlag);
+        *result = fromMagnitudeWord(bitWidth, val, signFlag);
     }
     else {
         *result = SVInt(bitWidth, 0, signFlag);
@@ -2272,7 +2294,7 @@ SVInt SVInt::udiv(const SVInt& lhs, const SVInt& rhs, bool bothSigned) {
         return SVInt(lhs.bitWidth, 0, bothSigned);
     // X and Y are actually a single word
     if (lhsWords == 1 && rhsWords == 1)
-        return SVInt(lhs.bitWidth, lhs.pVal[0] / rhs.pVal[0], bothSigned);
+        return fromMagnitudeWord(lhs.bitWidth, lhs.pVal[0] / rhs.pVal[0], bothSigned);
 
     // compute it the hard way with the Knuth algorithm
     SVInt quotient;
@@ -2302,7 +2324,7 @@ SVInt SVInt::urem(const SVInt& lhs, const SVInt& rhs, bool bothSigned) {
         return lhs;
     // X and Y are actually a single word
     if (lhsWords == 1)
-        return SVInt(lhs.bitWidth, lhs.pVal[0] % rhs.pVal[0], bothSigned);
+        return fromMagnitudeWord(lhs.bitWidth, lhs.pVal[0] % rhs.pVal[0], bothSigned);
 
     // compute it the hard way with the Knuth algorithm
     SVInt remainder;
