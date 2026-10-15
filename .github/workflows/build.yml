@@ -3,9 +3,9 @@ name: CI Build
 on:
   workflow_dispatch:
   push:
-    branches: [ master ]
+    branches: [ master, boson-base ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, boson-base ]
 
 jobs:
   build:
