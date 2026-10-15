@@ -40,9 +40,11 @@ Expression& IntegerLiteral::fromSyntax(Compilation& comp, const LiteralExpressio
 
     const Type* type;
     SVInt val = syntax.literal.intValue();
-    if (val.getBitWidth() < 32 || comp.languageVersion() < LanguageVersion::v1800_2023) {
-        // In v2023 the rule changed to not truncate unsized literals.
-        // Literals smaller than 32 bits are always sized up to 32.
+    if (val.getBitWidth() < 32) {
+        // Unsized literals are never truncated, whatever the language version:
+        // v1800-2023 made this the rule, and it is what iverilog and VCS do
+        // for earlier versions too. Literals smaller than 32 bits are always
+        // sized up to 32.
         val = val.resize(32);
         val.setSigned(true);
         type = &comp.getIntType();

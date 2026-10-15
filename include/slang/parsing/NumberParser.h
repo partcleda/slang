@@ -168,10 +168,9 @@ public:
     }
 
 private:
-    void checkIntOverflow(Token token) {
-        if (languageVersion < LanguageVersion::v1800_2023 && token.intValue() > INT32_MAX)
-            reportIntOverflow(token);
-    }
+    // Unsized decimal literals keep their full width (see
+    // IntegerLiteral::fromSyntax), so nothing overflows and nothing is reported.
+    void checkIntOverflow(Token) {}
 
     void startVector(Token baseToken, Token sizeToken);
     int append(Token token, bool isFirst);
