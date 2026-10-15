@@ -769,7 +769,13 @@ Expression& Expression::bindAssignmentPattern(Compilation& comp,
     }
 
     if (!assignmentTarget || assignmentTarget->isError()) {
-        if (!assignmentTarget)
+        // An untyped pattern inside an uninstantiated scope (an unreferenced
+        // definition's checking body, an untaken generate branch) has no target
+        // type by construction: the instance it connects to is a placeholder and
+        // is never lowered. That is not an error in the design; the instantiated
+        // copy binds against the real port type. Keep the diagnostic for
+        // instantiated scopes, where the pattern is genuinely unresolvable.
+        if (!assignmentTarget && !context.scope->isUninstantiated())
             context.addDiag(diag::AssignmentPatternNoContext, syntax.sourceRange());
         return badExpr(comp, nullptr);
     }
