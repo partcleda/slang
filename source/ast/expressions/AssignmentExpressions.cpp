@@ -1143,6 +1143,23 @@ ConstantValue SimpleAssignmentPatternExpression::applyConversions(EvalContext& c
     }
 }
 
+// If the given expression is an assignment pattern that carries no explicit type
+// (`'{...}` rather than `type_t'{...}`), returns it, otherwise returns nullptr.
+// Such an expression has no self-determined type -- it can only be bound once a
+// target type is known -- so a `default:` setter of this shape has to be deferred
+// until the type of each element it covers is in hand (SV-2017 10.9.2).
+static const ExpressionSyntax* untypedAssignmentPattern(const ExpressionSyntax& expr) {
+    auto e = &expr;
+    while (e->kind == SyntaxKind::ParenthesizedExpression)
+        e = e->as<ParenthesizedExpressionSyntax>().expression;
+
+    if (e->kind == SyntaxKind::AssignmentPatternExpression &&
+        !e->as<AssignmentPatternExpressionSyntax>().type) {
+        return e;
+    }
+    return nullptr;
+}
+
 static const Expression* matchElementValue(
     const ASTContext& context, const Type& elementType, const FieldSymbol* targetField,
     SourceRange sourceRange,
@@ -1188,6 +1205,14 @@ static const Expression* matchElementValue(
             return &Expression::bindRValue(elementType, *defaultSyntax, {}, context);
         }
     }
+
+    // A default value that is itself an untyped assignment pattern describes the
+    // value of each element the default key covers, not the value of that element's
+    // individual members -- so bind it against the element type directly instead of
+    // descending. Descending would try to match `'{...}` against each leaf member
+    // (e.g. an `int`), which cannot succeed.
+    if (defaultSetter && untypedAssignmentPattern(*defaultSyntax))
+        return &Expression::bindRValue(elementType, *defaultSyntax, {}, context);
 
     // Otherwise, we check first if the type is a struct or array, in which
     // case we descend recursively into its members before continuing on with the default.
@@ -1253,6 +1278,19 @@ static const Expression* matchElementValue(
     return nullptr;
 }
 
+// Binds the value of a `default:` pattern key when that value is itself an untyped
+// assignment pattern, or returns nullptr when it should be bound the normal
+// (self-determined) way. Such a value has no self-determined type, so binding it
+// here would report AssignmentPatternNoContext for perfectly legal code. Binding it
+// against the error type instead records the syntax without issuing a diagnostic;
+// matchElementValue then rebinds it against each element type the key covers.
+static const Expression* bindPatternDefaultSetter(Compilation& comp, const ASTContext& context,
+                                                  const ExpressionSyntax& expr) {
+    if (!untypedAssignmentPattern(expr))
+        return nullptr;
+    return &Expression::bindRValue(comp.getErrorType(), expr, {}, context);
+}
+
 Expression& StructuredAssignmentPatternExpression::forStruct(
     Compilation& comp, const StructuredAssignmentPatternSyntax& syntax, const ASTContext& context,
     const Type& type, const Scope& structScope, SourceRange sourceRange) {
@@ -1269,8 +1307,13 @@ Expression& StructuredAssignmentPatternExpression::forStruct(
                 context.addDiag(diag::AssignmentPatternKeyDupDefault, item->key->sourceRange());
                 bad = true;
             }
-            defaultSetter = &selfDetermined(comp, *item->expr, context);
-            bad |= defaultSetter->bad();
+            if (auto patternDefault = bindPatternDefaultSetter(comp, context, *item->expr)) {
+                defaultSetter = patternDefault;
+            }
+            else {
+                defaultSetter = &selfDetermined(comp, *item->expr, context);
+                bad |= defaultSetter->bad();
+            }
         }
         else if (item->key->kind == SyntaxKind::IdentifierName) {
             auto nameToken = item->key->as<IdentifierNameSyntax>().identifier;
@@ -1408,8 +1451,13 @@ Expression& StructuredAssignmentPatternExpression::forFixedArray(
                 context.addDiag(diag::AssignmentPatternKeyDupDefault, item->key->sourceRange());
                 bad = true;
             }
-            defaultSetter = &selfDetermined(comp, *item->expr, context);
-            bad |= defaultSetter->bad();
+            if (auto patternDefault = bindPatternDefaultSetter(comp, context, *item->expr)) {
+                defaultSetter = patternDefault;
+            }
+            else {
+                defaultSetter = &selfDetermined(comp, *item->expr, context);
+                bad |= defaultSetter->bad();
+            }
             continue;
         }
 
