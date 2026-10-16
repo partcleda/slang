@@ -1751,7 +1751,7 @@ bool Compilation::findConstCallResult(const SubroutineSymbol& subroutine, uint8_
                                       uint64_t astFlags, std::span<const ConstantValue> args,
                                       size_t argsHash, ConstantValue& result,
                                       uint32_t& steps) const {
-    std::unique_lock lock(constCallMutex);
+    std::unique_lock<std::mutex> lock(constCallMutex);
     auto it = constCallMap.find(argsHash);
     if (it == constCallMap.end())
         return false;
@@ -1773,7 +1773,7 @@ void Compilation::addConstCallResult(const SubroutineSymbol& subroutine, uint8_t
     // Bound the memory spent on the memo; the limit only costs speed, never results.
     static constexpr size_t MaxEntries = 1 << 16;
 
-    std::unique_lock lock(constCallMutex);
+    std::unique_lock<std::mutex> lock(constCallMutex);
     if (constCallEntries.size() >= MaxEntries)
         return;
 

@@ -1695,3 +1695,38 @@ endmodule
     auto& c = compilation.getRoot().lookupName("top.m2.C")->as<ParameterSymbol>();
     CHECK(c.getValue().integer() == 500);
 }
+
+TEST_CASE("Memoized constant function calls with aggregate arguments") {
+    auto tree = SyntaxTree::fromText(R"(
+package p;
+    function automatic int weigh(int a[3], string s, int q[$], int m[string], shortreal r);
+        int w = 0;
+        for (int i = 0; i < 40; i++) w += a[i % 3] + s.len() + q.size() + m.num() + int'(r);
+        return w;
+    endfunction
+endpackage
+
+module leaf #(parameter int K = 0);
+    localparam int A[3] = '{K, 2, 3};
+    localparam int Q[$] = '{1, 2};
+    localparam int M[string] = '{"a": 1, "b": K};
+    localparam int W = p::weigh(A, "xy", Q, M, 1.5);
+endmodule
+
+module top;
+    leaf #(1) l1a();
+    leaf #(1) l1b();
+    leaf #(2) l2();
+endmodule
+)");
+
+    Compilation compilation;
+    compilation.addSyntaxTree(tree);
+    NO_COMPILATION_ERRORS;
+
+    auto w = [&](std::string_view path) {
+        return compilation.getRoot().lookupName(path)->as<ParameterSymbol>().getValue().integer();
+    };
+    CHECK(w("top.l1a.W") == w("top.l1b.W"));
+    CHECK(w("top.l1a.W") != w("top.l2.W"));
+}
