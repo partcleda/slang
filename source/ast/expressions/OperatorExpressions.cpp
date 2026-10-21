@@ -2274,7 +2274,7 @@ Expression& ReplicationExpression::fromSyntax(Compilation& compilation,
     }
 
     auto width = context.requireValidBitWidth(
-        SVInt(32, uint64_t(*count), true) * right->type->getBitWidth(), syntax.sourceRange());
+        SVInt(64, uint64_t(*count), true) * right->type->getBitWidth(), syntax.sourceRange());
     if (!width)
         return badExpr(compilation, result);
 

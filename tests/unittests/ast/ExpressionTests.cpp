@@ -3894,3 +3894,35 @@ endmodule
     compilation.addSyntaxTree(tree);
     NO_COMPILATION_ERRORS;
 }
+
+TEST_CASE("Replication widths are checked before uint32 truncation") {
+    for (const auto [count, width] :
+         {std::pair{16777216, 256}, std::pair{16777217, 256}, std::pair{33554432, 256},
+          std::pair{8388608, 512}, std::pair{4194304, 1024}, std::pair{16777215, 256},
+          std::pair{2147483647, 2}}) {
+        for (auto bit : {"0", "1", "x"}) {
+            CAPTURE(count, width, bit);
+            auto tree = SyntaxTree::fromText("module m(output logic o); assign o = ^{ " +
+                                             std::to_string(count) + "{ {" + std::to_string(width) +
+                                             "{1'b" + bit + "}} } }; endmodule");
+            Compilation compilation;
+            compilation.addSyntaxTree(tree);
+            auto& diags = compilation.getAllDiagnostics();
+            REQUIRE(diags.size() == 1);
+            CHECK(diags[0].code == diag::ValueExceedsMaxBitWidth);
+        }
+    }
+}
+
+TEST_CASE("Replication accepts the maximum supported vector width") {
+    auto tree = SyntaxTree::fromText(R"(
+module m(input logic [16777214:0] v, output logic [16777214:0] o,
+         output logic [255:0] small_value);
+    assign o = {1{v}};
+    assign small_value = {2{128'h1234}};
+endmodule
+)");
+    Compilation compilation;
+    compilation.addSyntaxTree(tree);
+    NO_COMPILATION_ERRORS;
+}
